@@ -2,15 +2,15 @@
 FROM rocker/shiny-verse:latest
 
 # system libraries of general use
-RUN apt-get update && apt-get install -y \
-    sudo \
-    pandoc \
-    pandoc-citeproc \
-    libcurl4-gnutls-dev \
-    libcairo2-dev \
-    libxt-dev \
-    libssl-dev \
-    libssh2-1-dev 
+# RUN apt-get update && apt-get install -y \
+#    sudo \
+#    pandoc \
+#    pandoc-citeproc \
+#    libcurl4-gnutls-dev \
+#   libcairo2-dev \
+#    libxt-dev \
+#    libssl-dev \
+#    libssh2-1-dev 
   
 
 # install R packages required 
@@ -19,12 +19,8 @@ RUN R -e "install.packages('shiny', repos='http://cran.rstudio.com/')"
 RUN R -e "install.packages('shinydashboard', repos='http://cran.rstudio.com/')"
 RUN R -e "devtools::install_github('andrewsali/shinycssloaders')"
 RUN R -e "install.packages('shinyjs', repos='http://cran.rstudio.com/')"
-RUN R -e "install.packages('dplyr', repos='http://cran.rstudio.com/')"
-
-# RUN R -e "install.packages('shinydashboardPlus', repos='http://cran.rstudio.com/')"
-# RUN R -e "install.packages('DT', repos='http://cran.rstudio.com/')"
-# RUN R -e "install.packages('plotly', repos='http://cran.rstudio.com/')"
-
+RUN R -e "install.packages('DT', repos='http://cran.rstudio.com/')"
+RUN R -e "install.packages('plotly', repos='http://cran.rstudio.com/')"
 
 # copy the app to the image
 COPY covidata.Rproj /srv/shiny-server/

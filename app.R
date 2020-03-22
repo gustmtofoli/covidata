@@ -1,12 +1,7 @@
 library(shinydashboard)
-# library(shinydashboardPlus)
-# library(leaflet)
-# library(DT)
-# library(plotly)
+library(DT)
+library(plotly)
 library(shinycssloaders)
-library(dplyr)
-# library(shinyWidgets)
-# library(shinyjs)
 
 header <- dashboardHeader(
     title = tagList(
@@ -34,20 +29,23 @@ body <- dashboardBody(
             ),
             fluidRow(
                 box(
-                    width = 12,
-                    uiOutput("select_country") %>% withSpinner(color="#0dc5c1")
+                  width = 12,
+                  collapsible = FALSE,
+                  title = "Rank",
+                  DT::dataTableOutput("country_rank")  %>% withSpinner(color="#0dc5c1")
                 )
             ),
             fluidRow(
-                infoBoxOutput("n_confirmed_info"),
-                infoBoxOutput("n_death_info"),
-                infoBoxOutput("n_death_ratio_info")
+              box(
+                width = 12,
+                uiOutput("select_country")   %>% withSpinner(color="#0dc5c1"),
+                plotlyOutput("confirmed_curve")  %>% withSpinner(color="#0dc5c1")
+              )
             )
         )
     )
 )
 
-# Define UI for application that draws a histogram
 ui <- fluidPage(
     shinyUI(
         dashboardPage(
@@ -58,6 +56,8 @@ ui <- fluidPage(
         )
     )
 )
+
+# ======================================================================================
 
 variables <- reactiveValues(file_n_confirmed = NULL, 
                             file_n_death = NULL,
@@ -82,7 +82,6 @@ Download_Covid_Data <- function(url, output_file_name) {
     return (data)
 }
 
-# Define server logic required to draw a histogram
 server <- function(input, output) {
 
     output$select_country <- renderUI({
@@ -90,20 +89,20 @@ server <- function(input, output) {
         url_n_death <- "/hxlproxy/api/data-preview.csv?url=https%3A%2F%2Fraw.githubusercontent.com%2FCSSEGISandData%2FCOVID-19%2Fmaster%2Fcsse_covid_19_data%2Fcsse_covid_19_time_series%2Ftime_series_19-covid-Deaths.csv&filename=time_series_2019-ncov-Deaths.csv"
         
         n_confirmed_data <- Download_Covid_Data(url_n_confirmed, "n_confirmed.csv")
-        variables$file_n_confirmed <- n_confirmed_data
-        
-        all_confirmed_data <- na.omit(n_confirmed_data[ncol(n_confirmed_data)])
-        variables$all_confirmed <- sum(all_confirmed_data)
-        
         n_death_data <- Download_Covid_Data(url_n_death, "n_death.csv")
-        variables$file_n_death <- n_death_data
+        
+        all_confirmed_data <- na.omit(n_confirmed_data[, ncol(n_confirmed_data)])
+        
+        variables$all_confirmed <- sum(all_confirmed_data)
         
         all_death_data <- na.omit(n_death_data[ncol(n_death_data)])
         variables$all_death <- sum(all_death_data)
-        
+       
+        variables$file_n_confirmed <- n_confirmed_data
+        variables$file_n_death <- n_death_data
         countries <- unique(n_confirmed_data$Country.Region)
         
-        selectInput("select_country", label = h4("Select country"),
+        selectInput("select_country", label = h5("Select country"),
                     choices = countries,
                     selected = 1, multiple = FALSE)
     })
@@ -178,6 +177,86 @@ server <- function(input, output) {
         )
     })
     
+    output$country_rank <- DT::renderDataTable({
+      df_confirmed <- variables$file_n_confirmed
+      df_death <- variables$file_n_death
+      
+      ctry = c()
+      confirmed = c()
+      death = c()
+      ratio = c()
+      
+      for (country in unique(df_confirmed$Country.Region)) {
+        subset_country_confirmed <- subset(df_confirmed, df_confirmed$Country.Region == country)
+        sum_confirmed <- sum(subset_country_confirmed[ncol(subset_country_confirmed)])
+        
+        subset_country_death <- subset(df_death, df_death$Country.Region == country)
+        sum_death <- sum(subset_country_death[ncol(subset_country_death)])
+        
+        ratio_country <- round((sum_death/sum_confirmed)*100, 2)
+        
+        ctry = c(ctry, country)
+        confirmed = c(confirmed, sum_confirmed)
+        death = c(death, sum_death)
+        ratio = c(ratio, ratio_country)
+      }
+      
+      df_country_rank <- data.frame(country = ctry, n_confirmed = confirmed, death = death, ratio = ratio)
+      df_country_rank
+    })
+    
+    output$confirmed_curve <- renderPlotly({
+      n_confirmed_data <- variables$file_n_confirmed
+      n_death_data <- variables$file_n_death
+      
+      country <- input$select_country
+      
+      country_c <- subset(n_confirmed_data, n_confirmed_data$Country.Region == country)
+      country_d <- subset(n_death_data, n_death_data$Country.Region == country)
+      
+      days <- colnames(n_confirmed_data)[5:ncol(country_c)]
+      
+      days_new <- c()
+      for (label in days) {
+        if (nchar(label) < 8) {
+          label <- gsub("1.20", "01.20", label)
+          label <- gsub("2.20", "02.20", label)
+          label <- gsub("3.20", "03.20", label)
+          label <- gsub("4.20", "04.20", label)
+          label <- gsub("5.20", "05.20", label)
+          label <- gsub("6.20", "06.20", label)
+          label <- gsub("7.20", "07.20", label)
+          label <- gsub("8.20", "08.20", label)
+          label <- gsub("9.20", "09.20", label)
+        }
+        
+        days_new <- c(days_new, label)
+      }
+      
+      counts_c <- country_c[, 5: ncol(country_c)]
+      
+      counts_d <- country_d[, 5: ncol(country_d)]
+      
+      n_c <- c()
+      for (i in 1:length(counts_c)) {
+        n_c <- c(n_c, sum(counts_c[, i]))
+      }
+      
+      n_d <- c()
+      for (i in 1:length(counts_d)) {
+        n_d <- c(n_d, sum(counts_d[, i]))
+      }
+      
+      df_timeseries <- data.frame(day=days_new, n_c=n_c, n_d=n_d)
+      print(df_timeseries)
+      
+      plot <- plot_ly(data = df_timeseries, x = ~day, y = ~n_c, name = 'Confirmed', type = 'scatter', mode = 'lines')
+      # plot_ly(data = df_timeseries, x = ~day, y = ~n_c, name = 'Confirmed', type = 'scatter', mode = 'lines') %>%
+      plot <- plot %>% add_trace(y = ~n_d, name = 'Death', line = list(color = 'red'))
+      plot<- plot %>% layout(yaxis = list(title="Occurrences"))
+      plot
+    })
+    
     # ===================================================================
     
     observeEvent(input$select_country, {
@@ -188,8 +267,8 @@ server <- function(input, output) {
         confirmed_country <- subset(file_n_confirmed, file_n_confirmed$Country.Region == country)
         death_country <- subset(file_n_death, file_n_death$Country.Region == country)
         
-        n_confirmed_country <- confirmed_country[1, ncol(confirmed_country)]
-        n_death_country <- death_country[1, ncol(death_country)]
+        n_confirmed_country <- sum(confirmed_country[ncol(confirmed_country)])
+        n_death_country <- sum(death_country[ncol(death_country)])
         
         variables$n_confirmed_country <- n_confirmed_country
         variables$n_death_country <- n_death_country
