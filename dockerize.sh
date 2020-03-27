@@ -13,4 +13,4 @@ echo
 
 echo ">>> RUNNING APP"
 
-sudo docker run --rm -p 3838:3838 "$SYSTEM_NAME"
+sudo docker run -d -p 3838:3838 "$SYSTEM_NAME"
