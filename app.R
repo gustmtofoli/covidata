@@ -2,6 +2,7 @@ library(shinydashboard)
 library(DT)
 library(plotly)
 library(shinycssloaders)
+library(shinyWidgets)
 
 header <- dashboardHeader(
     title = "COVID-19",
@@ -50,8 +51,17 @@ body <- dashboardBody(
             fluidRow(
               box(
                 width = 12,
-                uiOutput("select_country")   %>% withSpinner(color="#0dc5c1"),
-                plotlyOutput("confirmed_curve")  %>% withSpinner(color="#0dc5c1")
+                materialSwitch(inputId = "group_countries", label = "All countries: ", status = "primary", right = FALSE),
+                conditionalPanel(
+                  "!input.group_countries",
+                  uiOutput("select_country") %>% withSpinner(color="#0dc5c1"),
+                  plotlyOutput("confirmed_curve")  %>% withSpinner(color="#0dc5c1")
+                ),
+                conditionalPanel(
+                  "input.group_countries",
+                  plotlyOutput("curve_all_countries")  %>% withSpinner(color="#0dc5c1")
+                )
+                
               )
             )
         )
@@ -259,7 +269,54 @@ server <- function(input, output) {
         
         df_timeseries <- data.frame(day=days_new, n_c=n_c, n_d=n_d)
         
-        plot <- plot_ly(data = df_timeseries, x = ~day, y = ~n_c, name = 'Confirmed', type = 'scatter', mode = 'lines')
+        plot <- plot_ly(data = df_timeseries, x = ~day, y = ~n_c, name = 'Confirmed', type = 'scatter', mode = 'lines+markers')
+        plot <- plot %>% add_trace(y = ~n_d, name = 'Death', line = list(color = 'red'))
+        plot<- plot %>% layout(yaxis = list(title="Occurrences"), hovermode = 'compare')
+        plot
+      }
+    })
+    
+    output$curve_all_countries <- renderPlotly({
+      if (!is.null(variables$file_n_confirmed) && !is.null(variables$file_n_death)) {
+        
+        n_confirmed_data <- variables$file_n_confirmed
+        n_death_data <- variables$file_n_death
+        
+        days <- colnames(n_confirmed_data)[5:ncol(n_confirmed_data)]
+        
+        days_new <- c()
+        for (label in days) {
+          if (nchar(label) < 8) {
+            label <- gsub("1.20", "01.20", label)
+            label <- gsub("2.20", "02.20", label)
+            label <- gsub("3.20", "03.20", label)
+            label <- gsub("4.20", "04.20", label)
+            label <- gsub("5.20", "05.20", label)
+            label <- gsub("6.20", "06.20", label)
+            label <- gsub("7.20", "07.20", label)
+            label <- gsub("8.20", "08.20", label)
+            label <- gsub("9.20", "09.20", label)
+          }
+          
+          days_new <- c(days_new, label)
+        }
+        
+        counts_c_all <- n_confirmed_data[, 5: ncol(n_confirmed_data)]
+        counts_d_all <- n_death_data[, 5: ncol(n_death_data)]
+        
+        n_c_all <- c()
+        for (i in 1:length(counts_c_all)) {
+          n_c_all <- c(n_c_all, sum(counts_c_all[, i]))
+        }
+        
+        n_d_all <- c()
+        for (i in 1:length(counts_d_all)) {
+          n_d_all <- c(n_d_all, sum(counts_d_all[, i]))
+        }
+        
+        df_timeseries <- data.frame(day=days_new, n_c=n_c_all, n_d=n_d_all)
+        
+        plot <- plot_ly(data = df_timeseries, x = ~day, y = ~n_c, name = 'Confirmed', type = 'scatter', mode = 'lines+markers')
         plot <- plot %>% add_trace(y = ~n_d, name = 'Death', line = list(color = 'red'))
         plot<- plot %>% layout(yaxis = list(title="Occurrences"), hovermode = 'compare')
         plot
