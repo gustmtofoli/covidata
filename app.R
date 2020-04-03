@@ -83,6 +83,7 @@ ui <- fluidPage(
 
 variables <- reactiveValues(file_n_confirmed = NULL, 
                             file_n_death = NULL,
+                            file_n_recovered = NULL,
                             n_confirmed_country = 0,
                             n_death_country = 0,
                             n_recovered_country = 0,
@@ -103,9 +104,11 @@ server <- function(input, output) {
     output$select_country <- renderUI({
         url_n_confirmed <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv"
         url_n_death <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv"
-
+        url_n_recovered <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_recovered_global.csv"
+        
         n_confirmed_data <- Download_Covid_Data(url_n_confirmed, "n_confirmed.csv")
         n_death_data <- Download_Covid_Data(url_n_death, "n_death.csv")
+        n_recovered_data <- Download_Covid_Data(url_n_recovered, "n_recovered.csv")
         
         all_confirmed_data <- na.omit(n_confirmed_data[, ncol(n_confirmed_data)])
         variables$all_confirmed <- sum(all_confirmed_data)
@@ -113,37 +116,19 @@ server <- function(input, output) {
         all_death_data <- na.omit(n_death_data[ncol(n_death_data)])
         variables$all_death <- sum(all_death_data)
         
+        all_recovered_data <- na.omit(n_recovered_data[ncol(n_recovered_data)])
+        variables$all_recovered <- sum(all_recovered_data)
+        
         variables$file_n_confirmed <- n_confirmed_data
         variables$file_n_death <- n_death_data
-
+        variables$file_n_recovered <- n_recovered_data
+        
         countries <- unique(n_confirmed_data$Country.Region)
         
         selectInput("select_country", label = h5("Select country"),
                     choices = countries,
                     selected = 1, multiple = FALSE)
         
-    })
-    
-    output$n_confirmed_info <- renderInfoBox({
-        n_confirmed_country <- variables$n_confirmed_country
-        infoBox(
-            "Confirmed",
-            paste0(n_confirmed_country),
-            icon = icon("bug"),
-            color = "orange", 
-            fill = TRUE
-        )
-    })
-    
-    output$n_death_info <- renderInfoBox({
-        n_death_country <- variables$n_death_country
-        infoBox(
-            "Death",
-            paste0(n_death_country),
-            icon = icon("skull"),
-            color = "red", 
-            fill = TRUE
-        )
     })
     
     output$all_confirmed_info <- renderInfoBox({
@@ -181,19 +166,6 @@ server <- function(input, output) {
         )
     })
     
-    output$n_death_ratio_info <- renderInfoBox({
-        n_confirmed <- variables$n_confirmed_country
-        n_death <- variables$n_death_country
-        n_death_ratio <- round((n_death/n_confirmed)*100, 2)
-        infoBox(
-            "Death ratio",
-            paste0(n_death_ratio, "%"),
-            icon = icon("percent"),
-            color = "blue", 
-            fill = TRUE
-        )
-    })
-    
     output$country_rank <- DT::renderDataTable({
       df_confirmed <- variables$file_n_confirmed
       df_death <- variables$file_n_death
@@ -203,7 +175,7 @@ server <- function(input, output) {
       confirmed = c()
       death = c()
       recovered = c()
-      ratio = c()
+      death_ratio = c()
       
       for (country in unique(df_confirmed$Country.Region)) {
         subset_country_confirmed <- subset(df_confirmed, df_confirmed$Country.Region == country)
@@ -212,29 +184,35 @@ server <- function(input, output) {
         subset_country_death <- subset(df_death, df_death$Country.Region == country)
         sum_death <- sum(subset_country_death[ncol(subset_country_death)])
         
+        subset_country_recovered <- subset(df_recovered, df_recovered$Country.Region == country)
+        sum_recovered <- sum(subset_country_recovered[ncol(subset_country_recovered)])
+        
         ratio_country <- round((sum_death/sum_confirmed)*100, 2)
         
         ctry = c(ctry, country)
         confirmed = c(confirmed, sum_confirmed)
         death = c(death, sum_death)
-        ratio = c(ratio, ratio_country)
+        recovered = c(recovered, sum_recovered)
+        death_ratio = c(death_ratio, ratio_country)
       }
       
-      df_country_rank <- data.frame(country = ctry, n_confirmed = confirmed, death = death, ratio = ratio)
+      df_country_rank <- data.frame(country = ctry, confirmed = confirmed, death = death, recovered = recovered, death_ratio = death_ratio)
       df_country_rank
     })
     
     output$confirmed_curve <- renderPlotly({
-      if (!is.null(variables$file_n_confirmed) && !is.null(variables$file_n_death)) {
+      if (!is.null(variables$file_n_confirmed) && !is.null(variables$file_n_death) && !is.null(variables$file_n_recovered)) {
         
         n_confirmed_data <- variables$file_n_confirmed
         n_death_data <- variables$file_n_death
+        n_recovered_data <- variables$file_n_recovered
         
         country <- input$select_country
         
         country_c <- subset(n_confirmed_data, n_confirmed_data$Country.Region == country)
         country_d <- subset(n_death_data, n_death_data$Country.Region == country)
-        
+        country_r <- subset(n_recovered_data, n_recovered_data$Country.Region == country)
+      
         days <- colnames(n_confirmed_data)[5:ncol(country_c)]
         
         days_new <- c()
@@ -256,6 +234,7 @@ server <- function(input, output) {
         
         counts_c <- country_c[, 5: ncol(country_c)]
         counts_d <- country_d[, 5: ncol(country_d)]
+        counts_r <- country_r[, 5: ncol(country_r)]
         
         n_c <- c()
         for (i in 1:length(counts_c)) {
@@ -267,20 +246,27 @@ server <- function(input, output) {
           n_d <- c(n_d, sum(counts_d[, i]))
         }
         
-        df_timeseries <- data.frame(day=days_new, n_c=n_c, n_d=n_d)
+        n_r <- c()
+        for (i in 1:length(counts_r)) {
+          n_r <- c(n_r, sum(counts_r[, i]))
+        }
+        
+        df_timeseries <- data.frame(day=days_new, n_c=n_c, n_d=n_d, n_r=n_r)
         
         plot <- plot_ly(data = df_timeseries, x = ~day, y = ~n_c, name = 'Confirmed', type = 'scatter', mode = 'lines+markers')
         plot <- plot %>% add_trace(y = ~n_d, name = 'Death', line = list(color = 'red'))
-        plot<- plot %>% layout(yaxis = list(title="Occurrences"), hovermode = 'compare')
+        plot <- plot %>% add_trace(y = ~n_r, name = 'Recovered', line = list(color = 'green'))
+        plot <- plot %>% layout(yaxis = list(title="Occurrences"), hovermode = 'compare')
         plot
       }
     })
     
     output$curve_all_countries <- renderPlotly({
-      if (!is.null(variables$file_n_confirmed) && !is.null(variables$file_n_death)) {
+      if (!is.null(variables$file_n_confirmed) && !is.null(variables$file_n_death) && !is.null(variables$file_n_recovered)) {
         
         n_confirmed_data <- variables$file_n_confirmed
         n_death_data <- variables$file_n_death
+        n_recovered_data <- variables$file_n_recovered
         
         days <- colnames(n_confirmed_data)[5:ncol(n_confirmed_data)]
         
@@ -303,6 +289,7 @@ server <- function(input, output) {
         
         counts_c_all <- n_confirmed_data[, 5: ncol(n_confirmed_data)]
         counts_d_all <- n_death_data[, 5: ncol(n_death_data)]
+        counts_r_all <- n_recovered_data[, 5: ncol(n_recovered_data)]
         
         n_c_all <- c()
         for (i in 1:length(counts_c_all)) {
@@ -314,11 +301,17 @@ server <- function(input, output) {
           n_d_all <- c(n_d_all, sum(counts_d_all[, i]))
         }
         
-        df_timeseries <- data.frame(day=days_new, n_c=n_c_all, n_d=n_d_all)
+        n_r_all <- c()
+        for (i in 1: length(counts_r_all)) {
+          n_r_all <- c(n_r_all, sum(counts_r_all[, i]))
+        }
+        
+        df_timeseries <- data.frame(day=days_new, n_c = n_c_all, n_d = n_d_all, n_r = n_r_all)
         
         plot <- plot_ly(data = df_timeseries, x = ~day, y = ~n_c, name = 'Confirmed', type = 'scatter', mode = 'lines+markers')
         plot <- plot %>% add_trace(y = ~n_d, name = 'Death', line = list(color = 'red'))
-        plot<- plot %>% layout(yaxis = list(title="Occurrences"), hovermode = 'compare')
+        plot <- plot %>% add_trace(y = ~n_r, name = 'Recovered', line = list(color = 'green'))
+        plot <- plot %>% layout(yaxis = list(title="Occurrences"), hovermode = 'compare')
         plot
       }
     })
@@ -326,16 +319,20 @@ server <- function(input, output) {
     observeEvent(input$select_country, {
         file_n_confirmed <- variables$file_n_confirmed
         file_n_death <- variables$file_n_death
+        file_n_recovered <- variables$file_n_recovered
         
         country <- input$select_country
         confirmed_country <- subset(file_n_confirmed, file_n_confirmed$Country.Region == country)
         death_country <- subset(file_n_death, file_n_death$Country.Region == country)
+        recovered_country <- subset(file_n_recovered, file_n_recovered$Country.Region == country)
         
         n_confirmed_country <- sum(confirmed_country[ncol(confirmed_country)])
         n_death_country <- sum(death_country[ncol(death_country)])
+        n_recovered_country <- sum(recovered_country[ncol(recovered_country)])
         
         variables$n_confirmed_country <- n_confirmed_country
         variables$n_death_country <- n_death_country
+        variables$n_recovered_country <- n_recovered_country
         
     })
   
