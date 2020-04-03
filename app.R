@@ -36,8 +36,9 @@ body <- dashboardBody(
             "covid_statistics",
             fluidRow(
                 infoBoxOutput("all_confirmed_info"),
-                infoBoxOutput("all_death_info"),
                 infoBoxOutput("all_recovered_info"),
+                infoBoxOutput("all_active_cases_info"),
+                infoBoxOutput("all_death_info"),
                 infoBoxOutput("all_death_ratio_info")
             ),
             fluidRow(
@@ -137,9 +138,34 @@ server <- function(input, output) {
             "World confirmed",
             paste0(all_confirmed),
             icon = icon("bug"),
-            color = "orange", 
+            color = "blue", 
             fill = TRUE
         )
+    })
+    
+    output$all_active_cases_info <- renderInfoBox({
+      all_recovered <- variables$all_recovered
+      all_death <- variables$all_death
+      all_confirmed <- variables$all_confirmed
+      all_active_cases <- all_confirmed - all_death - all_recovered
+      infoBox(
+        "World active cases",
+        paste0(all_active_cases),
+        icon = icon("bullseye"),
+        color = "yellow", 
+        fill = TRUE
+      )
+    })
+    
+    output$all_recovered_info <- renderInfoBox({
+      all_recovered <- variables$all_recovered
+      infoBox(
+        "World recovered",
+        paste0(all_recovered),
+        icon = icon("check"),
+        color = "green", 
+        fill = TRUE
+      )
     })
     
     output$all_death_info <- renderInfoBox({
@@ -161,7 +187,7 @@ server <- function(input, output) {
             "World death ratio",
             paste0(all_death_ratio, "%"),
             icon = icon("percent"),
-            color = "blue",
+            color = "navy",
             fill = TRUE
         )
     })
@@ -176,6 +202,7 @@ server <- function(input, output) {
       death = c()
       recovered = c()
       death_ratio = c()
+      active_cases = c()
       
       for (country in unique(df_confirmed$Country.Region)) {
         subset_country_confirmed <- subset(df_confirmed, df_confirmed$Country.Region == country)
@@ -194,9 +221,10 @@ server <- function(input, output) {
         death = c(death, sum_death)
         recovered = c(recovered, sum_recovered)
         death_ratio = c(death_ratio, ratio_country)
+        active_cases = c(active_cases, sum_confirmed - sum_death - sum_recovered)
       }
       
-      df_country_rank <- data.frame(country = ctry, confirmed = confirmed, death = death, recovered = recovered, death_ratio = death_ratio)
+      df_country_rank <- data.frame(country = ctry, confirmed = confirmed, death = death, active_cases = active_cases,recovered = recovered, death_ratio = death_ratio)
       df_country_rank
     })
     
