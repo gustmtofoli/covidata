@@ -6,7 +6,8 @@ library(shinyWidgets)
 
 header <- dashboardHeader(
     title = "COVID-19",
-    titleWidth = 187
+    titleWidth = 187,
+    menuItemOutput("menuInfoUpdate")
 )
 
 sidebar <- dashboardSidebar(
@@ -24,7 +25,12 @@ body <- dashboardBody(
           box(
             width = 12,
             title = "Data",
-            "The data used in this application is provided by John Hopkins CSSE. You can check the data by yourself visiting this url: https://github.com/CSSEGISandData/COVID-19"
+            "The data used in this application is provided by",
+            strong("John Hopkins CSSE"),
+            ". You can check the data by yourself visiting this url: https://github.com/CSSEGISandData/COVID-19",
+            br(),
+            strong("Updated every day at 20:55 (Timezone: Sao Paulo - Brazil)")
+          
           ),
           box(
             width = 12,
@@ -101,6 +107,14 @@ Download_Covid_Data <- function(url, output_file_name) {
 }
 
 server <- function(input, output) {
+  
+    output$menuInfoUpdate <- renderMenu({
+      menuItem(
+        "Updated every day at 20:55 (Timezone: Sao Paulo - Brazil)", 
+        icon = icon("calendar"), 
+        href = "https://github.com/CSSEGISandData/COVID-19/tree/master/csse_covid_19_data/csse_covid_19_time_series"
+        )
+    })
 
     output$select_country <- renderUI({
         url_n_confirmed <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv"
