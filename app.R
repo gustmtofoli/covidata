@@ -98,13 +98,11 @@ variables <- reactiveValues(file_n_confirmed = NULL,
                             all_death = 0,
                             all_recovered = 0)
 
-Download_Covid_Data <- function(url, output_file_name) {
-    dest_file <- paste0("~/", output_file_name)
-    write.csv(data.frame(), output_file_name)
-    download.file(url, dest_file)
-    data <- read.csv(url, header = TRUE, sep = ",")
-    return (data)
-}
+source("DownloadCovidData.R", local=TRUE)
+source("GetSumByCountry.R", local=TRUE)
+source("FormatDays.R", local=TRUE)
+source("GetSumList.R", local=TRUE)
+source("GetSumTotal.R", local=TRUE)
 
 server <- function(input, output) {
   
@@ -125,14 +123,9 @@ server <- function(input, output) {
         n_death_data <- Download_Covid_Data(url_n_death, "n_death.csv")
         n_recovered_data <- Download_Covid_Data(url_n_recovered, "n_recovered.csv")
         
-        all_confirmed_data <- na.omit(n_confirmed_data[, ncol(n_confirmed_data)])
-        variables$all_confirmed <- sum(all_confirmed_data)
-        
-        all_death_data <- na.omit(n_death_data[ncol(n_death_data)])
-        variables$all_death <- sum(all_death_data)
-        
-        all_recovered_data <- na.omit(n_recovered_data[ncol(n_recovered_data)])
-        variables$all_recovered <- sum(all_recovered_data)
+        variables$all_confirmed <- Get_Sum_Total(n_confirmed_data)
+        variables$all_death <- Get_Sum_Total(n_death_data)
+        variables$all_recovered <- Get_Sum_Total(n_recovered_data)
         
         variables$file_n_confirmed <- n_confirmed_data
         variables$file_n_death <- n_death_data
@@ -255,43 +248,11 @@ server <- function(input, output) {
         country_d <- subset(n_death_data, n_death_data$Country.Region == country)
         country_r <- subset(n_recovered_data, n_recovered_data$Country.Region == country)
       
-        days <- colnames(n_confirmed_data)[5:ncol(country_c)]
+        n_c = Get_Sum_List(subset(n_confirmed_data, n_confirmed_data$Country.Region == country))
+        n_d = Get_Sum_List(subset(n_death_data, n_death_data$Country.Region == country))
+        n_r = Get_Sum_List(subset(n_recovered_data, n_recovered_data$Country.Region == country))
         
-        days_new <- c()
-        for (label in days) {
-          if (nchar(label) < 8) {
-            label <- gsub("1.20", "01.20", label)
-            label <- gsub("2.20", "02.20", label)
-            label <- gsub("3.20", "03.20", label)
-            label <- gsub("4.20", "04.20", label)
-            label <- gsub("5.20", "05.20", label)
-            label <- gsub("6.20", "06.20", label)
-            label <- gsub("7.20", "07.20", label)
-            label <- gsub("8.20", "08.20", label)
-            label <- gsub("9.20", "09.20", label)
-          }
-          
-          days_new <- c(days_new, label)
-        }
-        
-        counts_c <- country_c[, 5: ncol(country_c)]
-        counts_d <- country_d[, 5: ncol(country_d)]
-        counts_r <- country_r[, 5: ncol(country_r)]
-        
-        n_c <- c()
-        for (i in 1:length(counts_c)) {
-          n_c <- c(n_c, sum(counts_c[, i]))
-        }
-        
-        n_d <- c()
-        for (i in 1:length(counts_d)) {
-          n_d <- c(n_d, sum(counts_d[, i]))
-        }
-        
-        n_r <- c()
-        for (i in 1:length(counts_r)) {
-          n_r <- c(n_r, sum(counts_r[, i]))
-        }
+        days_new <- Format_Days(n_confirmed_data)
         
         df_timeseries <- data.frame(day=days_new, n_c=n_c, n_d=n_d, n_r=n_r)
         
@@ -310,43 +271,11 @@ server <- function(input, output) {
         n_death_data <- variables$file_n_death
         n_recovered_data <- variables$file_n_recovered
         
-        days <- colnames(n_confirmed_data)[5:ncol(n_confirmed_data)]
+        days_new <- Format_Days(n_confirmed_data)
         
-        days_new <- c()
-        for (label in days) {
-          if (nchar(label) < 8) {
-            label <- gsub("1.20", "01.20", label)
-            label <- gsub("2.20", "02.20", label)
-            label <- gsub("3.20", "03.20", label)
-            label <- gsub("4.20", "04.20", label)
-            label <- gsub("5.20", "05.20", label)
-            label <- gsub("6.20", "06.20", label)
-            label <- gsub("7.20", "07.20", label)
-            label <- gsub("8.20", "08.20", label)
-            label <- gsub("9.20", "09.20", label)
-          }
-          
-          days_new <- c(days_new, label)
-        }
-        
-        counts_c_all <- n_confirmed_data[, 5: ncol(n_confirmed_data)]
-        counts_d_all <- n_death_data[, 5: ncol(n_death_data)]
-        counts_r_all <- n_recovered_data[, 5: ncol(n_recovered_data)]
-        
-        n_c_all <- c()
-        for (i in 1:length(counts_c_all)) {
-          n_c_all <- c(n_c_all, sum(counts_c_all[, i]))
-        }
-        
-        n_d_all <- c()
-        for (i in 1:length(counts_d_all)) {
-          n_d_all <- c(n_d_all, sum(counts_d_all[, i]))
-        }
-        
-        n_r_all <- c()
-        for (i in 1: length(counts_r_all)) {
-          n_r_all <- c(n_r_all, sum(counts_r_all[, i]))
-        }
+        n_c_all = Get_Sum_List(subset(n_confirmed_data, n_confirmed_data$Country.Region == country))
+        n_d_all = Get_Sum_List(subset(n_death_data, n_death_data$Country.Region == country))
+        n_r_all = Get_Sum_List(subset(n_recovered_data, n_recovered_data$Country.Region == country))
         
         df_timeseries <- data.frame(day=days_new, n_c = n_c_all, n_d = n_d_all, n_r = n_r_all)
         
@@ -359,23 +288,10 @@ server <- function(input, output) {
     })
     
     observeEvent(input$select_country, {
-        file_n_confirmed <- variables$file_n_confirmed
-        file_n_death <- variables$file_n_death
-        file_n_recovered <- variables$file_n_recovered
-        
         country <- input$select_country
-        confirmed_country <- subset(file_n_confirmed, file_n_confirmed$Country.Region == country)
-        death_country <- subset(file_n_death, file_n_death$Country.Region == country)
-        recovered_country <- subset(file_n_recovered, file_n_recovered$Country.Region == country)
-        
-        n_confirmed_country <- sum(confirmed_country[ncol(confirmed_country)])
-        n_death_country <- sum(death_country[ncol(death_country)])
-        n_recovered_country <- sum(recovered_country[ncol(recovered_country)])
-        
-        variables$n_confirmed_country <- n_confirmed_country
-        variables$n_death_country <- n_death_country
-        variables$n_recovered_country <- n_recovered_country
-        
+        variables$n_confirmed_country <- Get_Sum_By_Country(variables$file_n_confirmed, country)
+        variables$n_death_country <- Get_Sum_By_Country(variables$file_n_death, country)
+        variables$n_recovered_country <- Get_Sum_By_Country(variables$file_n_recovered, country)
     })
   
 }
