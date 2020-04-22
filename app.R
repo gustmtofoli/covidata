@@ -3,6 +3,7 @@ library(DT)
 library(plotly)
 library(shinycssloaders)
 library(shinyWidgets)
+library(reshape2)
 
 header <- dashboardHeader(
     title = "COVID-19",
@@ -56,20 +57,31 @@ body <- dashboardBody(
                 )
             ),
             fluidRow(
-              box(
+              tabBox(
+                title = "Explore Data",
                 width = 12,
-                materialSwitch(inputId = "group_countries", label = "All countries: ", status = "primary", right = FALSE),
-                conditionalPanel(
-                  "!input.group_countries",
-                  uiOutput("select_country") %>% withSpinner(color="#0dc5c1"),
-                  plotlyOutput("confirmed_curve")  %>% withSpinner(color="#0dc5c1")
+                tabPanel(
+                  "Country",
+                  materialSwitch(inputId = "group_countries", label = "All countries: ", status = "primary", right = FALSE),
+                  conditionalPanel(
+                    "!input.group_countries",
+                    uiOutput("select_country") %>% withSpinner(color="#0dc5c1"),
+                    plotlyOutput("confirmed_curve")  %>% withSpinner(color="#0dc5c1")
+                  ),
+                  conditionalPanel(
+                    "input.group_countries",
+                    plotlyOutput("curve_all_countries")  %>% withSpinner(color="#0dc5c1")
+                  )
                 ),
-                conditionalPanel(
-                  "input.group_countries",
-                  plotlyOutput("curve_all_countries")  %>% withSpinner(color="#0dc5c1")
+                tabPanel(
+                  "Compare countries",
+                  materialSwitch(inputId = "log_scale", label = "Log scale: ", status = "primary", right = FALSE),
+                  uiOutput("select_countries") %>% withSpinner(color="#0dc5c1"),
+                  plotlyOutput("curve_compared_countries")  %>% withSpinner(color="#0dc5c1")
+                  
                 )
-                
               )
+
             )
         )
     )
@@ -111,7 +123,7 @@ server <- function(input, output) {
         "Updated every day at 20:55 (Timezone: Sao Paulo - Brazil)", 
         icon = icon("calendar"), 
         href = "https://github.com/CSSEGISandData/COVID-19/tree/master/csse_covid_19_data/csse_covid_19_time_series"
-        )
+      )
     })
 
     output$select_country <- renderUI({
@@ -137,6 +149,14 @@ server <- function(input, output) {
                     choices = countries,
                     selected = 1, multiple = FALSE)
         
+    })
+    
+    output$select_countries <- renderUI({
+      n_confirmed_data <- variables$file_n_confirmed
+      countries <- unique(n_confirmed_data$Country.Region)
+      selectInput("select_countries", label = h5("Select countries"),
+                  choices = countries,
+                  selected = 1, multiple = TRUE)
     })
     
     output$all_confirmed_info <- renderInfoBox({
@@ -264,6 +284,57 @@ server <- function(input, output) {
       }
     })
     
+    output$curve_compared_countries <- renderPlotly({
+      if (!is.null(variables$file_n_confirmed) && !is.null(variables$file_n_death) && !is.null(variables$file_n_recovered)) {
+        
+        n_confirmed_data <- variables$file_n_confirmed
+        n_death_data <- variables$file_n_death
+        n_recovered_data <- variables$file_n_recovered
+        
+        countries <- input$select_countries
+        
+        if (!is.null(countries)) {
+          countries_subset <- subset(n_confirmed_data, n_confirmed_data$Country.Region %in% countries)
+          
+          # counts_countries <- countries_subset[, 5: ncol(countries_subset)]
+          
+          days_new <- Format_Days(n_confirmed_data)
+          
+          counts_countries <- countries_subset[, 1: ncol(countries_subset)]
+          counts_countries <- counts_countries[, -c(1, 3, 4)]
+          for (country in countries) {
+            subset <- subset(counts_countries, counts_countries$Country.Region == country)
+            n <- ncol(subset)
+            for (i in 2:n) {
+              subset[i] <- colSums(subset[i])
+            }
+            counts_countries <- subset(counts_countries, countries_subset$Country.Region != country)
+            counts_countries <- rbind(counts_countries, unique(subset))
+            counts_countries <- counts_countries[order(counts_countries$Country.Region),]
+          }
+          counts_countries <- na.omit(unique(counts_countries))
+          # print(counts_countries)
+          countries_subset <- counts_countries
+          
+          countries_subset
+          countries <- sort(countries)
+          countries_subset_t <-as.data.frame(t(as.matrix(countries_subset[, 2: ncol(countries_subset)])))
+          names(countries_subset_t) <- countries 
+          countries_subset_t['day'] = days_new
+          countries_subset_t <- melt(countries_subset_t, id.vars = 'day', variable.name = 'countries')
+          countries_subset_t <- subset(countries_subset_t, countries_subset_t$value > 0)
+          plot <- plot_ly(data = countries_subset_t, x = ~day, y = ~value, color=~countries, type = 'scatter', mode = 'lines+markers')
+          
+          if (input$log_scale) {
+            plot <- layout(plot, yaxis = list(type = "log"))
+          }
+          
+          plot
+        }
+        
+      }
+    })
+    
     output$curve_all_countries <- renderPlotly({
       if (!is.null(variables$file_n_confirmed) && !is.null(variables$file_n_death) && !is.null(variables$file_n_recovered)) {
         
@@ -293,7 +364,7 @@ server <- function(input, output) {
         variables$n_death_country <- Get_Sum_By_Country(variables$file_n_death, country)
         variables$n_recovered_country <- Get_Sum_By_Country(variables$file_n_recovered, country)
     })
-  
+    
 }
 
 shinyApp(ui = ui, server = server)
